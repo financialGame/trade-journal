@@ -2995,14 +2995,15 @@
                 };
             }
             function mapAppUserToDb(u) {
-                return {
-                    id: u.id,
+                const row = {
                     name: u.name,
                     username: u.username,
                     password: u.password,
                     is_admin: !!u.isAdmin,
                     avatar: u.avatar || null
                 };
+                if (u.id) row.id = u.id;
+                return row;
             }
 
             async function getUsers() {
@@ -3013,9 +3014,20 @@
 
             async function setUsers(usersArr) {
                 if (!usersArr || usersArr.length === 0) return;
-                const rows = usersArr.map(mapAppUserToDb);
+                // Only upsert users that already have a real database id
+                const rows = usersArr.filter(u => u.id).map(mapAppUserToDb);
+                if (rows.length === 0) return;
                 const { error } = await db.from('users').upsert(rows);
                 if (error) console.error('setUsers error:', error.message || JSON.stringify(error));
+            }
+
+            async function insertUserRemote(user) {
+                const { data, error } = await db.from('users').insert(mapAppUserToDb(user)).select().single();
+                if (error) {
+                    console.error('insertUser error:', error.message || JSON.stringify(error));
+                    return null;
+                }
+                return data ? mapDbUserToApp(data) : null;
             }
 
             async function deleteUserRemote(id) {
@@ -3313,14 +3325,14 @@
             async function loadUsers() {
                 allUsers = await getUsers();
                 if (allUsers.length === 0) {
-                    allUsers = [{
-                        id: 1,
+                    await insertUserRemote({
                         name: 'Admin',
                         username: 'admin',
                         password: 'admin123',
-                        isAdmin: true
-                    }];
-                    await setUsers(allUsers);
+                        isAdmin: true,
+                        avatar: null
+                    });
+                    allUsers = await getUsers();
                 }
             }
 
@@ -3462,7 +3474,10 @@
                 currentUser.avatar = id;
                 const idx = allUsers.findIndex(u => u.id === currentUser.id);
                 if (idx !== -1) allUsers[idx].avatar = id;
-                setUsers(allUsers);
+                // Save directly to DB
+                db.from('users').update({ avatar: id }).eq('id', currentUser.id).then(({error}) => {
+                    if (error) console.error('avatar update error:', error.message || JSON.stringify(error));
+                });
                 setCurrentUser(currentUser);
                 renderAvatarInto(avatarLetter, currentUser);
                 renderAvatarInto(profileAvatar, currentUser);
@@ -4514,8 +4529,8 @@
                         const user = allUsers.find(u => u.id === id);
                         if (!user) return;
                         showConfirm(`Make ${user.name} an admin?`, async function() {
-                            user.isAdmin = true;
-                            await setUsers(allUsers);
+                            await db.from('users').update({ is_admin: true }).eq('id', id);
+                            allUsers = await getUsers();
                             renderUserList();
                             showToast('User promoted to Administrator.', 'success');
                         });
@@ -4605,12 +4620,8 @@
                     return;
                 }
 
-                // Re-sync with the database first so we never overwrite users added elsewhere,
-                // and so the freshly-added user is guaranteed to persist correctly.
+                // Re-sync with the database first so we never overwrite users added elsewhere
                 allUsers = await getUsers();
-                if (allUsers.length === 0) {
-                    allUsers = [{ id: 1, name: 'Admin', username: 'admin', password: 'admin123', isAdmin: true }];
-                }
 
                 const unameLower = username.toLowerCase();
                 if (allUsers.find(u => (u.username || '').toLowerCase() === unameLower)) {
@@ -4618,24 +4629,21 @@
                     return;
                 }
 
+                // Create user WITHOUT an id — let Supabase generate the real one
                 const newUser = {
-                    id: Date.now(),
                     name: name,
                     username: username,
                     password: password,
-                    isAdmin: false
+                    isAdmin: false,
+                    avatar: null
                 };
-                allUsers.push(newUser);
-                await setUsers(allUsers);
 
-                // Verify the write actually landed before telling the admin it worked.
-                const verify = await getUsers();
-                const persisted = verify.find(u => u.id === newUser.id);
-
-                renderUserList();
-                closeAddUserModal();
+                const persisted = await insertUserRemote(newUser);
 
                 if (persisted) {
+                    allUsers = await getUsers(); // refresh with real ids from DB
+                    renderUserList();
+                    closeAddUserModal();
                     showToast(`User "${name}" added successfully. They can now log in.`, 'success');
                 } else {
                     showToast('Could not save the new user — please try again.', 'error');
