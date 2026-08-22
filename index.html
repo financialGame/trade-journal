@@ -3014,7 +3014,6 @@
 
             async function setUsers(usersArr) {
                 if (!usersArr || usersArr.length === 0) return;
-                // Only upsert users that already have a real database id
                 const rows = usersArr.filter(u => u.id).map(mapAppUserToDb);
                 if (rows.length === 0) return;
                 const { error } = await db.from('users').upsert(rows);
@@ -3025,6 +3024,7 @@
                 const { data, error } = await db.from('users').insert(mapAppUserToDb(user)).select().single();
                 if (error) {
                     console.error('insertUser error:', error.message || JSON.stringify(error));
+                    showToast('Database error: ' + (error.message || 'Could not create user'), 'error');
                     return null;
                 }
                 return data ? mapDbUserToApp(data) : null;
@@ -3474,7 +3474,6 @@
                 currentUser.avatar = id;
                 const idx = allUsers.findIndex(u => u.id === currentUser.id);
                 if (idx !== -1) allUsers[idx].avatar = id;
-                // Save directly to DB
                 db.from('users').update({ avatar: id }).eq('id', currentUser.id).then(({error}) => {
                     if (error) console.error('avatar update error:', error.message || JSON.stringify(error));
                 });
@@ -4620,7 +4619,6 @@
                     return;
                 }
 
-                // Re-sync with the database first so we never overwrite users added elsewhere
                 allUsers = await getUsers();
 
                 const unameLower = username.toLowerCase();
@@ -4629,7 +4627,6 @@
                     return;
                 }
 
-                // Create user WITHOUT an id — let Supabase generate the real one
                 const newUser = {
                     name: name,
                     username: username,
@@ -4641,7 +4638,7 @@
                 const persisted = await insertUserRemote(newUser);
 
                 if (persisted) {
-                    allUsers = await getUsers(); // refresh with real ids from DB
+                    allUsers = await getUsers();
                     renderUserList();
                     closeAddUserModal();
                     showToast(`User "${name}" added successfully. They can now log in.`, 'success');
