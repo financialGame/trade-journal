@@ -2362,14 +2362,12 @@
                 <div id="loginForm">
                     <h2>Welcome Back</h2>
                     <p class="sub">Sign in to your trading journal</p>
-                    <label>Username</label>
-                    <input type="text" id="loginUser" placeholder="Enter username" value="admin" />
+                    <label>Username or Email</label>
+                    <input type="text" id="loginUser" placeholder="Enter username or email" autocomplete="username" />
                     <label>Password</label>
-                    <input type="password" id="loginPass" placeholder="Enter password" value="admin123" />
+                    <input type="password" id="loginPass" placeholder="Enter password" autocomplete="current-password" />
                     <button class="btn-primary" id="loginBtn">Sign In</button>
-                    <div class="auth-switch">
-                        Don't have an account? <a id="showRegister">Create one</a>
-                    </div>
+                    <div class="auth-switch">Accounts are created by an administrator.</div>
                 </div>
 
                 <!-- Register Form -->
@@ -2931,7 +2929,7 @@
             </div>
             <div class="form-group" style="margin-bottom:16px;">
                 <label>Password</label>
-                <input type="text" id="newUserPassword" placeholder="Create a password" />
+                <input type="password" id="newUserPassword" placeholder="Create a password (8+ characters)" autocomplete="new-password" />
             </div>
             <div class="app-modal-actions">
                 <button class="btn-cancel-edit" onclick="window.closeAddUserModal()">Cancel</button>
@@ -2978,6 +2976,8 @@
             //  SUPABASE CONNECTION
             // =============================================================
             const SUPABASE_URL = 'https://heqnwnxqcmwdiobwmjvh.supabase.co';
+            // Browser code may contain only a publishable/anon key. Never use
+            // a Supabase secret or service_role key in a public repository.
             const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhlcW53bnhxY213ZGlvYndtanZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU2MzM1NTAsImV4cCI6MjEwMTIwOTU1MH0.SFlgkun_5IByQsbuOxtUsTMJe4wb7a4Yinreqi0PFMs';
             const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -2989,7 +2989,6 @@
                     id: u.id,
                     name: u.name,
                     username: u.username,
-                    password: u.password,
                     isAdmin: !!u.is_admin,
                     avatar: u.avatar || null
                 };
@@ -2998,7 +2997,6 @@
                 const row = {
                     name: u.name,
                     username: u.username,
-                    password: u.password,
                     is_admin: !!u.isAdmin,
                     avatar: u.avatar || null
                 };
@@ -3007,7 +3005,7 @@
             }
 
             async function getUsers() {
-                const { data, error } = await db.from('users').select('*').order('id');
+                const { data, error } = await db.from('profiles').select('*').order('name');
                 if (error) { console.error('getUsers error:', error.message || JSON.stringify(error)); return []; }
                 return (data || []).map(mapDbUserToApp);
             }
@@ -3016,22 +3014,26 @@
                 if (!usersArr || usersArr.length === 0) return;
                 const rows = usersArr.filter(u => u.id).map(mapAppUserToDb);
                 if (rows.length === 0) return;
-                const { error } = await db.from('users').upsert(rows);
+                const { error } = await db.from('profiles').upsert(rows);
                 if (error) console.error('setUsers error:', error.message || JSON.stringify(error));
             }
 
             async function insertUserRemote(user) {
-                const { data, error } = await db.from('users').insert(mapAppUserToDb(user)).select().single();
+                const { data, error } = await db.functions.invoke('manage-user', {
+                    body: { action: 'create', name: user.name, username: user.username, password: user.password }
+                });
                 if (error) {
                     console.error('insertUser error:', error.message || JSON.stringify(error));
                     showToast('Database error: ' + (error.message || 'Could not create user'), 'error');
                     return null;
                 }
-                return data ? mapDbUserToApp(data) : null;
+                return data && data.profile ? mapDbUserToApp(data.profile) : null;
             }
 
             async function deleteUserRemote(id) {
-                const { error } = await db.from('users').delete().eq('id', id);
+                const { error } = await db.functions.invoke('manage-user', {
+                    body: { action: 'delete', userId: id }
+                });
                 if (error) console.error('deleteUser error:', error.message || JSON.stringify(error));
             }
 
@@ -3123,15 +3125,7 @@
                 if (error) console.error('addComment error:', error.message || JSON.stringify(error));
             }
 
-            // Login-session (which user is signed in on THIS device) stays local —
-            // this is just device state, not shared data.
-            function getCurrentUser() {
-                return JSON.parse(localStorage.getItem('journal_current_user') || 'null');
-            }
-
-            function setCurrentUser(u) {
-                localStorage.setItem('journal_current_user', JSON.stringify(u));
-            }
+            // Supabase Auth stores and refreshes the device session.
 
             // =============================================================
             //  STATE
@@ -3322,58 +3316,29 @@
             // =============================================================
             //  AUTH
             // =============================================================
-            async function loadUsers() {
-                allUsers = await getUsers();
-                if (allUsers.length === 0) {
-                    await insertUserRemote({
-                        name: 'Admin',
-                        username: 'admin',
-                        password: 'admin123',
-                        isAdmin: true,
-                        avatar: null
-                    });
-                    allUsers = await getUsers();
-                }
-            }
+            async function loadUsers() { allUsers = await getUsers(); }
 
             async function login(username, password) {
-                // Always re-sync from the database first, in case a user was added
-                // in this session (or another device) since allUsers was last loaded.
-                allUsers = await getUsers();
-                if (allUsers.length === 0) {
-                    allUsers = [{ id: 1, name: 'Admin', username: 'admin', password: 'admin123', isAdmin: true }];
-                    await setUsers(allUsers);
-                }
                 const uname = (username || '').trim().toLowerCase();
-                const pass = (password || '').trim();
-                const user = allUsers.find(u => (u.username || '').trim().toLowerCase() === uname && (u.password || '').trim() === pass);
-                if (user) {
-                    currentUser = user;
-                    setCurrentUser(user);
-                    viewingUserId = user.id;
-                    showApp();
-                    await renderAll();
-                    return true;
-                }
-                return false;
-            }
-
-            async function register(name, username, password) {
-                allUsers = await getUsers();
-                if (allUsers.length === 0) {
-                    allUsers = [{ id: 1, name: 'Admin', username: 'admin', password: 'admin123', isAdmin: true }];
-                }
-                const unameLower = (username || '').toLowerCase();
-                if (allUsers.find(u => (u.username || '').toLowerCase() === unameLower)) return false;
-                const isAdmin = allUsers.length === 0;
-                allUsers.push({ id: Date.now(), name: name.trim() || username, username, password, isAdmin });
-                await setUsers(allUsers);
+                const email = uname.includes('@') ? uname : `${uname}@tradejournal.local`;
+                const { data, error } = await db.auth.signInWithPassword({
+                    email,
+                    password
+                });
+                if (error || !data.user) return false;
+                await loadUsers();
+                const user = allUsers.find(u => u.id === data.user.id);
+                if (!user) { await db.auth.signOut(); return false; }
+                currentUser = user;
+                viewingUserId = user.id;
+                showApp();
+                await renderAll();
                 return true;
             }
 
-            function logout() {
+            async function logout() {
+                await db.auth.signOut();
                 currentUser = null;
-                setCurrentUser(null);
                 viewingUserId = null;
                 showAuth();
             }
@@ -3474,10 +3439,9 @@
                 currentUser.avatar = id;
                 const idx = allUsers.findIndex(u => u.id === currentUser.id);
                 if (idx !== -1) allUsers[idx].avatar = id;
-                db.from('users').update({ avatar: id }).eq('id', currentUser.id).then(({error}) => {
+                db.from('profiles').update({ avatar: id }).eq('id', currentUser.id).then(({error}) => {
                     if (error) console.error('avatar update error:', error.message || JSON.stringify(error));
                 });
-                setCurrentUser(currentUser);
                 renderAvatarInto(avatarLetter, currentUser);
                 renderAvatarInto(profileAvatar, currentUser);
                 renderAvatarGrids();
@@ -4514,7 +4478,7 @@
                 document.querySelectorAll('.select-user').forEach(el => {
                     el.addEventListener('click', async function(e) {
                         e.stopPropagation();
-                        const id = parseInt(this.dataset.id);
+                        const id = this.dataset.id;
                         viewingUserId = id;
                         await renderAll();
                         renderUserList();
@@ -4524,11 +4488,11 @@
                 document.querySelectorAll('.make-admin').forEach(el => {
                     el.addEventListener('click', function(e) {
                         e.stopPropagation();
-                        const id = parseInt(this.dataset.id);
+                        const id = this.dataset.id;
                         const user = allUsers.find(u => u.id === id);
                         if (!user) return;
                         showConfirm(`Make ${user.name} an admin?`, async function() {
-                            await db.from('users').update({ is_admin: true }).eq('id', id);
+                            await db.from('profiles').update({ is_admin: true }).eq('id', id);
                             allUsers = await getUsers();
                             renderUserList();
                             showToast('User promoted to Administrator.', 'success');
@@ -4539,7 +4503,7 @@
                 document.querySelectorAll('.remove-user').forEach(el => {
                     el.addEventListener('click', function(e) {
                         e.stopPropagation();
-                        const id = parseInt(this.dataset.id);
+                        const id = this.dataset.id;
                         showConfirm('Remove this user? This cannot be undone.', async function() {
                             allUsers = allUsers.filter(u => u.id !== id);
                             await deleteUserRemote(id);
@@ -4614,8 +4578,8 @@
                 const username = document.getElementById('newUserUsername').value.trim();
                 const password = document.getElementById('newUserPassword').value.trim();
 
-                if (!name || !username || !password) {
-                    showToast('Please fill in name, username and password.', 'error');
+                if (!name || !username || password.length < 8) {
+                    showToast('Enter a name, username and password of at least 8 characters.', 'error');
                     return;
                 }
 
@@ -5088,30 +5052,7 @@
                 if (!ok) showToast('Invalid username or password.', 'error');
             });
 
-            registerBtn.addEventListener('click', async function(e) {
-                e.preventDefault();
-                const name = regName.value.trim();
-                const user = regUser.value.trim();
-                const pass = regPass.value.trim();
-                if (!user || !pass) { showToast('Please fill in all fields.', 'error'); return; }
-                registerBtn.disabled = true;
-                const ok = await register(name, user, pass);
-                registerBtn.disabled = false;
-                if (ok) {
-                    showToast('Registration successful — please sign in.', 'success');
-                    showLogin.click();
-                    loginUser.value = user;
-                    loginPass.value = pass;
-                } else {
-                    showToast('Username already taken.', 'error');
-                }
-            });
-
-            showRegister.addEventListener('click', function(e) {
-                e.preventDefault();
-                loginForm.classList.add('hidden');
-                registerForm.classList.remove('hidden');
-            });
+            registerBtn.addEventListener('click', e => e.preventDefault());
 
             showLogin.addEventListener('click', function(e) {
                 e.preventDefault();
@@ -5209,12 +5150,12 @@
             //  INIT
             // =============================================================
             async function initApp() {
-                await loadUsers();
                 loadTheme();
                 loadDarkMode();
-                const saved = getCurrentUser();
-                if (saved) {
-                    const found = allUsers.find(u => u.id === saved.id);
+                const { data: { session } } = await db.auth.getSession();
+                if (session && session.user) {
+                    await loadUsers();
+                    const found = allUsers.find(u => u.id === session.user.id);
                     if (found) {
                         currentUser = found;
                         viewingUserId = found.id;
@@ -5230,10 +5171,7 @@
                     }
                 }
                 showAuth();
-                loginUser.value = 'admin';
-                loginPass.value = 'admin123';
-
-                console.log('✅ Journal App ready. Users:', allUsers.length);
+                console.log('Journal App ready');
             }
 
             initApp();
