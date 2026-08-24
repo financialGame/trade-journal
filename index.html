@@ -1506,6 +1506,17 @@
             background: var(--bg-hover);
         }
 
+        .btn-delete-trade {
+            margin-left: 6px;
+            padding: 6px 10px;
+            border: 1px solid var(--danger);
+            border-radius: 8px;
+            background: transparent;
+            color: var(--danger);
+            cursor: pointer;
+            font-weight: 600;
+        }
+
         .edited-tag {
             display: inline-block;
             margin-right: 6px;
@@ -2753,7 +2764,7 @@
                             <div class="form-row">
                                 <div class="form-group">
                                     <label><i class="fas fa-dollar-sign"></i> PnL <span class="req-star">*</span></label>
-                                    <input type="number" id="pnl" placeholder="0.00" step="0.01" />
+                                    <input type="number" id="pnl" placeholder="Calculated automatically" step="0.01" readonly />
                                 </div>
                                 <div class="form-group">
                                     <label><i class="fas fa-tags"></i> Tags</label>
@@ -3024,7 +3035,14 @@
                 });
                 if (error) {
                     console.error('insertUser error:', error.message || JSON.stringify(error));
-                    showToast('Database error: ' + (error.message || 'Could not create user'), 'error');
+                    let message = error.message || 'Could not create user';
+                    if (error.context && typeof error.context.json === 'function') {
+                        try {
+                            const details = await error.context.json();
+                            if (details && details.error) message = details.error;
+                        } catch (_) {}
+                    }
+                    showToast('Database error: ' + message, 'error');
                     return null;
                 }
                 return data && data.profile ? mapDbUserToApp(data.profile) : null;
@@ -3112,6 +3130,16 @@
             async function updateEntryRemote(key, entry) {
                 const { error } = await db.from('journal_entries').update(mapAppEntryToDb(entry)).eq('id', key);
                 if (error) console.error('updateEntry error:', error.message || JSON.stringify(error));
+            }
+
+            async function deleteEntryRemote(key) {
+                const { error } = await db.from('journal_entries').delete().eq('id', key);
+                if (error) {
+                    console.error('deleteEntry error:', error.message || JSON.stringify(error));
+                    showToast('Could not delete the trade: ' + (error.message || 'Database error'), 'error');
+                    return false;
+                }
+                return true;
             }
 
             async function getCommentsForEntry(entryKey) {
@@ -3826,7 +3854,7 @@
                     bestDirection.textContent = bestTrade.direction || '—';
                 }
 
-                // Positive Expectancy: (1 + AvgWin/AvgLoss) * WinRate - 1
+                // Normalized expectancy uses separate win and loss probabilities.
                 if (expectancyTotalEl) {
                     renderExpectancy(expectancyTotalEl, calcExpectancy(entries));
                 }
@@ -3840,7 +3868,8 @@
             }
 
             // =============================================================
-            //  POSITIVE EXPECTANCY: (1 + AvgWin/AvgLoss) * WinRate - 1
+            //  NORMALIZED EXPECTANCY:
+            //  ((WinRate × AvgWin) - (LossRate × AvgLoss)) ÷ AvgLoss
             // =============================================================
             function calcExpectancy(entries) {
                 const total = entries.length;
@@ -3856,10 +3885,11 @@
                     : 0;
                 const avgLoss = Math.abs(lossEntries.reduce((s, e) => s + parseFloat(e.pnl), 0) / lossEntries.length);
                 const winRate = winEntries.length / total;
+                const lossRate = lossEntries.length / total;
 
                 if (avgLoss === 0) return null;
 
-                return (1 + (avgWin / avgLoss)) * winRate - 1;
+                return ((winRate * avgWin) - (lossRate * avgLoss)) / avgLoss;
             }
 
             function renderExpectancy(el, expectancy) {
@@ -3974,12 +4004,26 @@
                                 <td onclick="window.openJournalDetail(${index})">${e.tags || '—'}</td>
                                 <td>
                                     <button class="btn-edit" onclick="event.stopPropagation(); window.openEditModal(${index})"><i class="fas fa-pen"></i> Edit</button>
+                                    <button class="btn-delete-trade" onclick="event.stopPropagation(); window.deleteJournalEntry(${index})"><i class="fas fa-trash"></i> Delete</button>
                                 </td>
                             </tr>
                         `;
                 }).join('');
 
                 window.__journalEntries = entries;
+            }
+
+            function deleteJournalEntry(index) {
+                const entries = window.__journalEntries || [];
+                const entry = entries[index];
+                if (!entry) return;
+                showConfirm(`Delete ${entry.symbol || 'this trade'}? This cannot be undone.`, async function() {
+                    const deleted = await deleteEntryRemote(entry.key);
+                    if (!deleted) return;
+                    showToast('Trade deleted successfully.', 'success');
+                    await renderAll();
+                    await renderJournalList();
+                });
             }
 
             // =============================================================
@@ -4837,15 +4881,31 @@
             }
 
             function updateRiskRewardPreview() {
-                if (!riskRewardPreviewEl) return;
                 const entryPrice = document.getElementById('entryPrice').value;
                 const exitPrice = document.getElementById('exitPrice').value;
                 const stopLoss = document.getElementById('stopLoss').value;
                 const rr = calcRiskReward(entryPrice, exitPrice, stopLoss);
-                if (rr === null) {
-                    riskRewardPreviewEl.value = '';
-                } else {
-                    riskRewardPreviewEl.value = rr.toFixed(2) + '  (1 : ' + rr.toFixed(2) + ')';
+                if (riskRewardPreviewEl) {
+                    if (rr === null) riskRewardPreviewEl.value = '';
+                    else riskRewardPreviewEl.value = rr.toFixed(2) + '  (1 : ' + rr.toFixed(2) + ')';
+                }
+                const pnlEl = document.getElementById('pnl');
+                const instrumentEl = document.getElementById('instrumentType');
+                const marketEl = document.getElementById('market');
+                const directionEl = document.getElementById('direction');
+                const quantityEl = document.getElementById('quantity');
+                const lotSizeEl = document.getElementById('lotSize');
+                const leverageEl = document.getElementById('leverage');
+                const size = (instrumentEl.value === 'Futures' || instrumentEl.value === 'Options' || marketEl.value === 'Stock')
+                    ? parseFloat(quantityEl.value) || 0 : parseFloat(lotSizeEl.value) || 0;
+                if (pnlEl) {
+                    if (!(parseFloat(entryPrice) > 0) || !(parseFloat(exitPrice) > 0) || !(size > 0)) pnlEl.value = '';
+                    else pnlEl.value = calcPnL({
+                        entryPrice, exitPrice, direction: directionEl.value,
+                        quantity: quantityEl.value, lotSize: lotSizeEl.value,
+                        leverage: leverageEl.value, instrumentType: instrumentEl.value,
+                        market: marketEl.value
+                    }).toFixed(2);
                 }
             }
 
@@ -4971,7 +5031,12 @@
                 const quantityValue = document.getElementById('quantity').value;
                 const lotSizeValue = document.getElementById('lotSize').value;
                 const leverageValue = document.getElementById('leverage').value;
-                const manualPnL = parseFloat(document.getElementById('pnl').value) || 0;
+                const calculatedPnL = calcPnL({
+                    entryPrice: entryPriceValue, exitPrice: exitPriceValue,
+                    direction: directionValue, quantity: quantityValue,
+                    lotSize: lotSizeValue, leverage: leverageValue,
+                    instrumentType: instrumentTypeValue, market: marketValue
+                });
                 const riskRewardValue = calcRiskReward(entryPriceValue, exitPriceValue, stopLossValue);
 
                 const nowStamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
@@ -4988,7 +5053,7 @@
                     exitPrice: parseFloat(exitPriceValue) || 0,
                     stopLoss: parseFloat(stopLossValue) || 0,
                     takeProfit: parseFloat(takeProfitValue) || 0,
-                    pnl: manualPnL,
+                    pnl: calculatedPnL,
                     riskReward: riskRewardValue,
                     tags: document.getElementById('tags').value || '',
                     notes: document.getElementById('notes').value || '',
@@ -5078,7 +5143,7 @@
             });
 
             // Live PnL preview + error-clear on the Add Journal form
-            ['entryPrice', 'exitPrice', 'stopLoss', 'takeProfit', 'quantity', 'lotSize', 'leverage', 'direction'].forEach(id => {
+            ['entryPrice', 'exitPrice', 'stopLoss', 'takeProfit', 'quantity', 'lotSize', 'leverage', 'direction', 'market', 'instrumentType'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) {
                     el.addEventListener('input', updateRiskRewardPreview);
@@ -5123,6 +5188,7 @@
             window.openJournalDetail = openJournalDetail;
             window.openCalendarTradeDetail = openCalendarTradeDetail;
             window.openEditModal = openEditModal;
+            window.deleteJournalEntry = deleteJournalEntry;
             window.saveEdit = saveEdit;
             window.addComment = addComment;
             window.closeModal = closeModal;
