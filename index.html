@@ -2755,8 +2755,8 @@
                             <div class="form-row">
                                 <div class="form-group">
                                     <label><i class="fas fa-scale-unbalanced"></i> Risk / Reward Ratio (auto)</label>
-                                    <input type="text" id="riskRewardPreview" placeholder="Fill entry, exit &amp; stop loss to preview" readonly />
-                                    <span class="hint">|Exit − Entry| ÷ |Stop Loss − Entry|</span>
+                                    <input type="text" id="riskRewardPreview" placeholder="Fill entry, take profit &amp; stop loss to preview" readonly />
+                                    <span class="hint">|Take Profit − Entry| ÷ |Stop Loss − Entry|</span>
                                 </div>
                             </div>
 
@@ -4289,7 +4289,7 @@
                                 </div>
                                 <div class="detail-row">
                                     <span class="detail-label">Take Profit</span>
-                                    <input type="number" id="editTakeProfit" step="0.01" value="${e.takeProfit || 0}" />
+                                    <input type="number" id="editTakeProfit" step="0.01" value="${e.takeProfit || 0}" oninput="window.updateEditRiskRewardPreview()" />
                                 </div>
                                 <div class="detail-row">
                                     <span class="detail-label">Risk / Reward (auto)</span>
@@ -4357,9 +4357,9 @@
                 const previewEl = document.getElementById('editRiskRewardPreview');
                 if (!previewEl) return;
                 const entryPrice = document.getElementById('editEntryPrice').value;
-                const exitPrice = document.getElementById('editExitPrice').value;
+                const takeProfit = document.getElementById('editTakeProfit').value;
                 const stopLoss = document.getElementById('editStopLoss').value;
-                const rr = calcRiskReward(entryPrice, exitPrice, stopLoss);
+                const rr = calcRiskReward(entryPrice, takeProfit, stopLoss);
                 previewEl.value = rr === null ? '' : rr.toFixed(2);
             }
 
@@ -4380,6 +4380,7 @@
                 const quantityValue = parseFloat(document.getElementById('editQuantity').value) || 0;
                 const leverageValue = parseFloat(document.getElementById('editLeverage').value) || 1;
                 const stopLossValue = parseFloat(document.getElementById('editStopLoss').value) || 0;
+                const takeProfitValue = parseFloat(document.getElementById('editTakeProfit').value) || 0;
 
                 const buys = [];
                 document.querySelectorAll('#editBuyEntries .buy-entry').forEach(el => {
@@ -4412,11 +4413,11 @@
                     quantity: quantityValue,
                     leverage: leverageValue,
                     stopLoss: stopLossValue,
-                    takeProfit: parseFloat(document.getElementById('editTakeProfit').value) || 0,
+                    takeProfit: takeProfitValue,
                     tags: document.getElementById('editTags').value || '',
                     notes: document.getElementById('editNotes').value || '',
                     pnl: parseFloat(document.getElementById('editPnL').value) || 0,
-                    riskReward: calcRiskReward(entryPriceValue, exitPriceValue, stopLossValue),
+                    riskReward: calcRiskReward(entryPriceValue, takeProfitValue, stopLossValue),
                     image: editImageDataUrl || originalEntry.image || null,
                     buys: buys,
                     shorts: shorts,
@@ -4868,23 +4869,24 @@
             }
 
             // =============================================================
-            //  RISK / REWARD RATIO: |Exit - Entry| / |Stop Loss - Entry|
+            //  RISK / REWARD RATIO: |Take Profit - Entry| / |Stop Loss - Entry|
             // =============================================================
-            function calcRiskReward(entryPrice, exitPrice, stopLoss) {
+            function calcRiskReward(entryPrice, takeProfit, stopLoss) {
                 entryPrice = parseFloat(entryPrice) || 0;
-                exitPrice = parseFloat(exitPrice) || 0;
+                takeProfit = parseFloat(takeProfit) || 0;
                 stopLoss = parseFloat(stopLoss) || 0;
                 const denominator = Math.abs(stopLoss - entryPrice);
                 if (denominator === 0) return null;
-                const numerator = Math.abs(exitPrice - entryPrice);
+                const numerator = Math.abs(takeProfit - entryPrice);
                 return numerator / denominator;
             }
 
             function updateRiskRewardPreview() {
                 const entryPrice = document.getElementById('entryPrice').value;
                 const exitPrice = document.getElementById('exitPrice').value;
+                const takeProfit = document.getElementById('takeProfit').value;
                 const stopLoss = document.getElementById('stopLoss').value;
-                const rr = calcRiskReward(entryPrice, exitPrice, stopLoss);
+                const rr = calcRiskReward(entryPrice, takeProfit, stopLoss);
                 if (riskRewardPreviewEl) {
                     if (rr === null) riskRewardPreviewEl.value = '';
                     else riskRewardPreviewEl.value = rr.toFixed(2) + '  (1 : ' + rr.toFixed(2) + ')';
@@ -5037,7 +5039,7 @@
                     lotSize: lotSizeValue, leverage: leverageValue,
                     instrumentType: instrumentTypeValue, market: marketValue
                 });
-                const riskRewardValue = calcRiskReward(entryPriceValue, exitPriceValue, stopLossValue);
+                const riskRewardValue = calcRiskReward(entryPriceValue, takeProfitValue, stopLossValue);
 
                 const nowStamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
 
