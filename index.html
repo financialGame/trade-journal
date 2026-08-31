@@ -1385,14 +1385,35 @@
 
         .image-preview {
             margin-top: 10px;
-            text-align: center;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 12px;
         }
 
         .image-preview img {
-            max-width: 100%;
-            max-height: 200px;
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
             border-radius: 12px;
             border: 2px solid var(--border-light);
+        }
+
+        .image-preview-item {
+            position: relative;
+        }
+
+        .image-remove-btn {
+            position: absolute;
+            top: 7px;
+            right: 7px;
+            width: 28px;
+            height: 28px;
+            border: 0;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.72);
+            color: #fff;
+            cursor: pointer;
+            z-index: 2;
         }
 
         /* =============================================================
@@ -2774,11 +2795,11 @@
 
                             <!-- Image Upload -->
                             <div class="form-group" style="margin-bottom:16px;">
-                                <label><i class="fas fa-image"></i> Upload Image <span class="req-star">*</span></label>
+                                <label><i class="fas fa-image"></i> Upload Images <span class="req-star">*</span></label>
                                 <div class="image-upload-area" id="imageUploadArea" onclick="document.getElementById('imageInput').click()">
                                     <i class="fas fa-cloud-upload-alt"></i>
-                                    <p>Click to upload a screenshot or chart</p>
-                                    <input type="file" id="imageInput" accept="image/*" style="display:none;" onchange="previewImage(event)" />
+                                    <p>Click to select one or more screenshots or charts</p>
+                                    <input type="file" id="imageInput" accept="image/*" multiple style="display:none;" onchange="previewImage(event)" />
                                 </div>
                                 <div class="image-preview" id="imagePreview"></div>
                             </div>
@@ -3055,6 +3076,17 @@
                 if (error) console.error('deleteUser error:', error.message || JSON.stringify(error));
             }
 
+            function normalizeImages(value) {
+                if (Array.isArray(value)) return value.filter(item => typeof item === 'string' && item);
+                if (typeof value !== 'string' || !value) return [];
+                try {
+                    const parsed = JSON.parse(value);
+                    return Array.isArray(parsed) ? parsed.filter(item => typeof item === 'string' && item) : [value];
+                } catch (_) {
+                    return [value];
+                }
+            }
+
             function mapDbEntryToApp(row) {
                 return {
                     key: row.id,
@@ -3076,7 +3108,7 @@
                     notes: row.notes,
                     date: row.entry_date,
                     entryDateTime: row.entry_date_time,
-                    image: row.image_url,
+                    image: normalizeImages(row.image_url),
                     buys: row.buys || [],
                     shorts: row.shorts || [],
                     comments: [],
@@ -3104,7 +3136,7 @@
                     notes: entry.notes,
                     entry_date: entry.date,
                     entry_date_time: entry.entryDateTime,
-                    image_url: entry.image,
+                    image_url: JSON.stringify(normalizeImages(entry.image)),
                     buys: entry.buys || [],
                     shorts: entry.shorts || [],
                     last_edited: entry.lastEdited
@@ -4156,12 +4188,16 @@
                             `;
                 }
 
-                if (e.image) {
+                const detailImages = normalizeImages(e.image);
+                if (detailImages.length) {
                     html += `
                                 <div class="detail-image">
-                                    <img src="${e.image}" alt="Trade screenshot" onclick="window.openLightbox(this.src)" />
-                                    <div style="margin-top:8px;">
-                                        <span class="btn-add-comment" style="cursor:pointer;" onclick="window.openLightbox(this.closest('.detail-image').querySelector('img').src)"><i class="fas fa-expand"></i> View Full Screen</span>
+                                    <div class="image-preview">
+                                        ${detailImages.map((src, imageIndex) => `
+                                            <div class="image-preview-item">
+                                                <img src="${src}" alt="Trade screenshot ${imageIndex + 1}" onclick="window.openLightbox(this.src)" />
+                                            </div>
+                                        `).join('')}
                                     </div>
                                 </div>
                             `;
@@ -4217,7 +4253,7 @@
                 isEditMode = true;
                 editingEntryKey = e.key;
                 editingEntryIndex = index;
-                editImageDataUrl = null;
+                editImageDataUrls = normalizeImages(e.image);
 
                 const buys = e.buys || [];
                 const shorts = e.shorts || [];
@@ -4312,12 +4348,10 @@
                                     <div class="detail-label" style="margin-bottom:8px;">Screenshot</div>
                                     <div class="image-upload-area" onclick="document.getElementById('editImageInput').click()">
                                         <i class="fas fa-cloud-upload-alt"></i>
-                                        <p>Click to replace the screenshot</p>
-                                        <input type="file" id="editImageInput" accept="image/*" style="display:none;" onchange="window.previewEditImage(event)" />
+                                        <p>Click to add one or more images</p>
+                                        <input type="file" id="editImageInput" accept="image/*" multiple style="display:none;" onchange="window.previewEditImage(event)" />
                                     </div>
-                                    <div class="image-preview" id="editImagePreview">
-                                        ${e.image ? `<img src="${e.image}" alt="Trade screenshot" onclick="window.openLightbox(this.src)" />` : '<p style="color:var(--text-secondary); font-size:0.85rem;">No image uploaded.</p>'}
-                                    </div>
+                                    <div class="image-preview" id="editImagePreview"></div>
                                 </div>
 
                                 <div style="margin-top:16px;">
@@ -4344,6 +4378,7 @@
 
                 modalBody.innerHTML = html;
                 modal.classList.add('active');
+                renderEditImagePreviews();
                 handleEditMarketChange(true);
             }
 
@@ -4418,7 +4453,7 @@
                     notes: document.getElementById('editNotes').value || '',
                     pnl: parseFloat(document.getElementById('editPnL').value) || 0,
                     riskReward: calcRiskReward(entryPriceValue, takeProfitValue, stopLossValue),
-                    image: editImageDataUrl || originalEntry.image || null,
+                    image: editImageDataUrls.slice(),
                     buys: buys,
                     shorts: shorts,
                     createdAt: originalEntry.createdAt || originalEntry.lastEdited || nowStamp,
@@ -4426,7 +4461,7 @@
                 };
 
                 await updateEntryRemote(key, entry);
-                editImageDataUrl = null;
+                editImageDataUrls = [];
 
                 showToast('Changes saved successfully.', 'success');
                 await renderAll();
@@ -4780,21 +4815,26 @@
             // =============================================================
             //  EDIT MODAL — IMAGE RE-UPLOAD
             // =============================================================
-            let editImageDataUrl = null;
-            function previewEditImage(e) {
-                const file = e.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = function(ev) {
-                    editImageDataUrl = ev.target.result;
-                    document.getElementById('editImagePreview').innerHTML = `
-                                <img src="${editImageDataUrl}" alt="Trade screenshot" onclick="window.openLightbox(this.src)" />
-                                <div style="margin-top:6px; font-size:0.8rem; color:var(--text-secondary);">
-                                    <i class="fas fa-check-circle" style="color:var(--pnl-positive);"></i> ${file.name}
-                                </div>
-                            `;
-                };
-                reader.readAsDataURL(file);
+            let editImageDataUrls = [];
+            function renderEditImagePreviews() {
+                const container = document.getElementById('editImagePreview');
+                if (!container) return;
+                container.innerHTML = editImageDataUrls.length ? editImageDataUrls.map((src, index) => `
+                    <div class="image-preview-item">
+                        <button type="button" class="image-remove-btn" onclick="window.removeEditImage(${index})" title="Remove image"><i class="fas fa-times"></i></button>
+                        <img src="${src}" alt="Trade screenshot ${index + 1}" onclick="window.openLightbox(this.src)" />
+                    </div>
+                `).join('') : '<p style="color:var(--text-secondary); font-size:0.85rem;">No image uploaded.</p>';
+            }
+            async function previewEditImage(e) {
+                const images = await readSelectedImages(e.target.files);
+                editImageDataUrls.push(...images);
+                renderEditImagePreviews();
+                e.target.value = '';
+            }
+            function removeEditImage(index) {
+                editImageDataUrls.splice(index, 1);
+                renderEditImagePreviews();
             }
 
             // =============================================================
@@ -4985,23 +5025,42 @@
             // =============================================================
             //  IMAGE UPLOAD
             // =============================================================
-            function previewImage(e) {
-                const file = e.target.files[0];
-                if (file) {
+            let journalImageDataUrls = [];
+            function readSelectedImages(fileList) {
+                const files = Array.from(fileList || []).filter(file => {
+                    if (!file.type.startsWith('image/')) return false;
+                    if (file.size > 5 * 1024 * 1024) {
+                        showToast(`${file.name} is larger than 5 MB and was not added.`, 'error');
+                        return false;
+                    }
+                    return true;
+                });
+                return Promise.all(files.map(file => new Promise((resolve, reject) => {
                     const reader = new FileReader();
-                    reader.onload = function(ev) {
-                        const dataUrl = ev.target.result;
-                        document.getElementById('imagePreview').innerHTML = `
-                                    <img src="${dataUrl}" alt="Trade screenshot" onclick="window.openLightbox(this.src)" />
-                                    <div style="margin-top:6px; font-size:0.8rem; color:var(--text-secondary);">
-                                        <i class="fas fa-check-circle" style="color:var(--pnl-positive);"></i> ${file.name}
-                                        <span style="margin-right:10px; cursor:pointer; color:var(--accent);" onclick="window.openLightbox(this.closest('.image-preview').querySelector('img').src)"><i class="fas fa-expand"></i> Preview</span>
-                                    </div>
-                                `;
-                        if (imageUploadArea) imageUploadArea.classList.remove('input-error');
-                    };
+                    reader.onload = event => resolve(event.target.result);
+                    reader.onerror = reject;
                     reader.readAsDataURL(file);
-                }
+                })));
+            }
+            function renderImagePreviews() {
+                const container = document.getElementById('imagePreview');
+                container.innerHTML = journalImageDataUrls.map((src, index) => `
+                    <div class="image-preview-item">
+                        <button type="button" class="image-remove-btn" onclick="window.removeJournalImage(${index})" title="Remove image"><i class="fas fa-times"></i></button>
+                        <img src="${src}" alt="Trade screenshot ${index + 1}" onclick="window.openLightbox(this.src)" />
+                    </div>
+                `).join('');
+                if (imageUploadArea) imageUploadArea.classList.toggle('input-error', journalImageDataUrls.length === 0);
+            }
+            async function previewImage(e) {
+                const images = await readSelectedImages(e.target.files);
+                journalImageDataUrls.push(...images);
+                renderImagePreviews();
+                e.target.value = '';
+            }
+            function removeJournalImage(index) {
+                journalImageDataUrls.splice(index, 1);
+                renderImagePreviews();
             }
 
             // =============================================================
@@ -5063,8 +5122,7 @@
                     entryDateTime: dateTimeValue || new Date().toISOString().slice(0, 16),
                     buys: [],
                     shorts: [],
-                    image: document.getElementById('imagePreview').querySelector('img') ? document.getElementById(
-                        'imagePreview').querySelector('img').src : null,
+                    image: journalImageDataUrls.slice(),
                     createdAt: nowStamp,
                     lastEdited: nowStamp
                 };
@@ -5099,6 +5157,7 @@
                 await renderAll();
                 await switchPage('dashboard');
                 document.getElementById('journalForm').reset();
+                journalImageDataUrls = [];
                 document.getElementById('imagePreview').innerHTML = '';
                 if (riskRewardPreviewEl) {
                     riskRewardPreviewEl.value = '';
@@ -5186,6 +5245,7 @@
             window.addShort = addShort;
             window.removeShort = removeShort;
             window.previewImage = previewImage;
+            window.removeJournalImage = removeJournalImage;
             window.saveJournal = saveJournal;
             window.openJournalDetail = openJournalDetail;
             window.openCalendarTradeDetail = openCalendarTradeDetail;
@@ -5208,6 +5268,7 @@
             window.addEditShort = addEditShort;
             window.removeEditShort = removeEditShort;
             window.previewEditImage = previewEditImage;
+            window.removeEditImage = removeEditImage;
             window.__closeConfirmModal = __closeConfirmModal;
             window.closeAddUserModal = closeAddUserModal;
             window.submitAddUser = submitAddUser;
