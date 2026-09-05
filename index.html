@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.5, user-scalable=yes" />
     <title>Trade Journal Pro</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -3155,7 +3155,12 @@
 
             async function insertEntryRemote(entry, userId) {
                 const { data, error } = await db.from('journal_entries').insert(mapAppEntryToDb(entry, userId)).select().single();
-                if (error) { console.error('insertEntry error:', error.message || JSON.stringify(error)); return null; }
+                if (error) {
+                    const message = error.message || 'Database error';
+                    console.error('insertEntry error:', message, error);
+                    showToast('Could not save journal: ' + message, 'error');
+                    return null;
+                }
                 return data.id;
             }
 
@@ -5026,21 +5031,50 @@
             //  IMAGE UPLOAD
             // =============================================================
             let journalImageDataUrls = [];
-            function readSelectedImages(fileList) {
+            function compressImage(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+                    reader.onload = event => {
+                        const image = new Image();
+                        image.onerror = () => reject(new Error(`Could not process ${file.name}`));
+                        image.onload = () => {
+                            const maxDimension = 1400;
+                            const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+                            const width = Math.max(1, Math.round(image.width * scale));
+                            const height = Math.max(1, Math.round(image.height * scale));
+                            const canvas = document.createElement('canvas');
+                            canvas.width = width;
+                            canvas.height = height;
+                            const context = canvas.getContext('2d');
+                            context.fillStyle = '#ffffff';
+                            context.fillRect(0, 0, width, height);
+                            context.drawImage(image, 0, 0, width, height);
+                            resolve(canvas.toDataURL('image/jpeg', 0.78));
+                        };
+                        image.src = event.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
+            async function readSelectedImages(fileList) {
                 const files = Array.from(fileList || []).filter(file => {
                     if (!file.type.startsWith('image/')) return false;
-                    if (file.size > 5 * 1024 * 1024) {
-                        showToast(`${file.name} is larger than 5 MB and was not added.`, 'error');
+                    if (file.size > 15 * 1024 * 1024) {
+                        showToast(`${file.name} is larger than 15 MB and was not added.`, 'error');
                         return false;
                     }
                     return true;
                 });
-                return Promise.all(files.map(file => new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = event => resolve(event.target.result);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
-                })));
+                const images = [];
+                for (const file of files) {
+                    try {
+                        images.push(await compressImage(file));
+                    } catch (error) {
+                        showToast(error.message || `Could not add ${file.name}`, 'error');
+                    }
+                }
+                return images;
             }
             function renderImagePreviews() {
                 const container = document.getElementById('imagePreview');
@@ -5148,7 +5182,6 @@
                 const newId = await insertEntryRemote(entry, userId);
 
                 if (!newId) {
-                    showToast('Could not save — please check your connection and try again.', 'error');
                     return;
                 }
 
