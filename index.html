@@ -2477,6 +2477,7 @@
                 <div class="top-nav" id="topNav">
                     <button class="nav-item active" data-page="dashboard"><i class="fas fa-home"></i> Home</button>
                     <button class="nav-item" data-page="addjournal"><i class="fas fa-plus-circle"></i> Add Journal</button>
+                    <button class="nav-item" data-page="strategies"><i class="fas fa-chess"></i> Strategies</button>
                     <button class="nav-item" data-page="journal"><i class="fas fa-book"></i> Journal</button>
                     <button class="nav-item" data-page="calendar"><i class="fas fa-calendar-alt"></i> Calendar</button>
                     <button class="nav-item" data-page="profile"><i class="fas fa-user-cog"></i> Profile</button>
@@ -2602,6 +2603,111 @@
                 <!-- ============================================================
                 PAGE: CALENDAR
                 ============================================================ -->
+                <div id="pageStrategies" class="page">
+ <div class="dash-card" style="margin-bottom:20px">
+ <h3><i class="fas fa-chess"></i> Strategy Performance</h3>
+ <p id="strategyScope"></p>
+ <div class="form-row"><div class="form-group"><label for="strategyFilter">Strategy</label><select id="strategyFilter" onchange="window.renderStrategies()"><option value="all">All Strategies</option></select></div></div>
+ <p id="strategyStatus" role="status"></p>
+ <p>Win Rate includes breakeven trades in the denominator, as in Home. PnL uses your saved trade values.</p>
+ </div><div class="dashboard-grid">
+
+                        <div class="dash-card">
+                            <div class="card-title"><i class="fas fa-chart-simple"></i> Performance Overview</div>
+                            <div class="stat-row">
+                                <span class="label">Total Trades</span>
+                                <span class="value" id="strategy_dashTotal">0</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="label">Win Rate</span>
+                                <span class="value green" id="strategy_dashWinRate">0%</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="label">Wins / Losses</span>
+                                <span class="value" id="strategy_dashWinsLosses">0 / 0</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="label">Net PnL</span>
+                                <span class="value gold" id="strategy_dashPnL">$0.00</span>
+                            </div>
+                        </div>
+
+                        <div class="dash-card">
+                            <div class="card-title"><i class="fas fa-crown" style="color:var(--gold);"></i> Best Trade</div>
+                            <div class="best-trade-box" id="strategy_bestTradeBox">
+                                <div class="trade-symbol" id="strategy_bestSymbol">—</div>
+                                <div class="trade-pnl" id="strategy_bestPnL">$0.00</div>
+                                <div style="display:flex; gap:12px; margin-top:6px; flex-wrap:wrap;">
+                                    <span class="trade-date" id="strategy_bestDate"><i class="far fa-calendar-alt"></i> No data</span>
+                                    <span class="badge-direction" id="strategy_bestDirection">—</span>
+                                </div>
+                            </div>
+                            <div style="margin-top:14px; display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-secondary);">
+                                <span><i class="fas fa-arrow-up" style="color:var(--pnl-positive);"></i> <span id="strategy_dashWins">0</span> wins</span>
+                                <span><i class="fas fa-arrow-down" style="color:var(--danger);"></i> <span id="strategy_dashLosses">0</span> losses</span>
+                            </div>
+                        </div>
+
+                        <div class="dash-card">
+                            <div class="card-title"><i class="fas fa-scale-balanced"></i> Average Performance</div>
+                            <div class="stat-row">
+                                <span class="label">Avg Win</span>
+                                <span class="value green" id="strategy_avgWin">$0.00</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="label">Avg Loss</span>
+                                <span class="value red" id="strategy_avgLoss">$0.00</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="label">Profit Factor</span>
+                                <span class="value gold" id="strategy_profitFactor">0.00</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="label">Best / Worst</span>
+                                <span class="value" id="strategy_bestWorst">$0 / $0</span>
+                            </div>
+                        </div>
+
+                        <div class="dash-card">
+                            <div class="card-title"><i class="fas fa-calendar-day"></i> Today's Summary</div>
+                            <div class="stat-row">
+                                <span class="label">Status</span>
+                                <span class="value green"><i class="fas fa-circle" style="font-size:0.5rem;"></i> Ready</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="label">Trades Today</span>
+                                <span class="value" id="strategy_todayTrades">0</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="label">Today PnL</span>
+                                <span class="value gold" id="strategy_todayPnL">$0.00</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="label">Best Today</span>
+                                <span class="value" style="color:var(--text-secondary);" id="strategy_todayBest">—</span>
+                            </div>
+                        </div>
+
+                        <div class="dash-card">
+                            <div class="card-title"><i class="fas fa-bullseye"></i> Positive Expectancy</div>
+                            <div class="stat-row">
+                                <span class="label">Total (all-time)</span>
+                                <span class="value" id="strategy_expectancyTotal">—</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="label">Last Month</span>
+                                <span class="value" id="strategy_expectancyLastMonth">—</span>
+                            </div>
+                            <p style="font-size:0.68rem; color:var(--text-secondary); margin-top:8px; line-height:1.4;">
+                                (1 + Avg Win / Avg Loss) × Win Rate − 1
+                            </p>
+                        </div>
+
+                    </div>
+ <div class="dash-card" style="margin-top:20px"><h3>Assign Strategy to Existing Trades</h3>
+ <p>Save Strategy changes only the strategy field of that trade.</p>
+ <div style="overflow-x:auto"><table class="journal-table"><thead><tr><th>Date</th><th>Symbol</th><th>PnL</th><th>Strategy</th><th>Action</th></tr></thead><tbody id="strategyTradeRows"></tbody></table></div></div>
+ </div>
                 <div id="pageCalendar" class="page">
                     <div class="calendar-full-container">
                         <div id="calendarNavContainer"></div>
@@ -2781,6 +2887,7 @@
                                 </div>
                             </div>
 
+                            <div class="form-row"><div class="form-group"><label for="strategySelect">Strategy <span class="req-star">*</span></label><select id="strategySelect" required><option value="">Select a strategy</option></select><button type="button" class="add-buy-btn" onclick="document.getElementById('newStrategyFields').hidden = !document.getElementById('newStrategyFields').hidden"><i class="fas fa-plus"></i> Add Strategy</button><div id="newStrategyFields" hidden><label for="newStrategyName">Strategy Name</label><input id="newStrategyName" maxlength="100" placeholder="e.g. Breakout"/><label for="newStrategyDescription">Description (optional)</label><textarea id="newStrategyDescription" maxlength="2000"></textarea><button type="button" class="add-buy-btn" id="saveStrategyButton" onclick="window.addStrategy()">Save Strategy</button></div><p id="strategyFormStatus" role="status"></p></div></div>
                             <!-- Row 7: PnL + Tags -->
                             <div class="form-row">
                                 <div class="form-group">
@@ -3013,6 +3120,80 @@
             const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhlcW53bnhxY213ZGlvYndtanZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU2MzM1NTAsImV4cCI6MjEwMTIwOTU1MH0.SFlgkun_5IByQsbuOxtUsTMJe4wb7a4Yinreqi0PFMs';
             const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+            let strategyCatalog = [];
+            let strategyRenderVersion = 0;
+            function strategyOption(value, label) {
+                const opt = document.createElement('option'); opt.value = value; opt.textContent = label; return opt;
+            }
+            function fillStrategySelect(el, mode, selected) {
+                el.replaceChildren();
+                if (mode === 'filter') el.append(strategyOption('all', 'All Strategies'), strategyOption('unassigned', 'Unassigned'));
+                else el.append(strategyOption('', mode === 'assign' ? 'Unassigned' : 'Select a strategy'));
+                strategyCatalog.forEach(x => el.append(strategyOption(x.id, x.name)));
+                if (selected && [...el.options].some(x => x.value === selected)) el.value = selected;
+            }
+            async function loadStrategies() {
+                const { data, error } = await db.from('strategies').select('id,name,description').order('name');
+                const status = document.getElementById('strategyFormStatus');
+                if (error) { status.textContent = 'Strategies could not load. Check that the SQL setup was completed. ' + error.message; return false; }
+                strategyCatalog = data || []; status.textContent = '';
+                const add = document.getElementById('strategySelect');
+                fillStrategySelect(add, 'add', add.value);
+                const filter = document.getElementById('strategyFilter');
+                fillStrategySelect(filter, 'filter', filter.value);
+                return true;
+            }
+            async function addStrategy() {
+                const name = document.getElementById('newStrategyName').value.trim();
+                const description = document.getElementById('newStrategyDescription').value.trim();
+                if (!name || name.length > 100) { showToast('Enter a strategy name (up to 100 characters).', 'error'); return; }
+                const button = document.getElementById('saveStrategyButton'); button.disabled = true;
+                try {
+                    const { data, error } = await db.from('strategies').insert({name,description,created_by:currentUser.id}).select('id').single();
+                    if (error) { showToast(error.code === '23505' ? 'That strategy name already exists.' : error.message, 'error'); return; }
+                    await loadStrategies(); document.getElementById('strategySelect').value = data.id;
+                    document.getElementById('newStrategyName').value = ''; document.getElementById('newStrategyDescription').value = '';
+                    document.getElementById('newStrategyFields').hidden = true; showToast('Strategy added.', 'success');
+                } finally { button.disabled = false; }
+            }
+            async function renderStrategies() {
+                const version = ++strategyRenderVersion;
+                const status = document.getElementById('strategyStatus');
+                status.textContent = 'Loading…';
+                if (!await loadStrategies()) { status.textContent = document.getElementById('strategyFormStatus').textContent; return; }
+                const target = (currentUser.isAdmin && viewingUserId) ? viewingUserId : currentUser.id;
+                const {data,error} = await db.from('journal_entries').select('*').eq('user_id',target);
+                if (version !== strategyRenderVersion) return;
+                if (error) { status.textContent = 'Could not load trades: ' + error.message; return; }
+                const entries = (data || []).map(mapDbEntryToApp).sort((a,b) => new Date(b.date)-new Date(a.date));
+                const selected = document.getElementById('strategyFilter').value;
+                const scoped = entries.filter(e => selected === 'all' || (selected === 'unassigned' ? !e.strategyId : e.strategyId === selected));
+                const user = allUsers.find(x => x.id === target);
+                document.getElementById('strategyScope').textContent = 'Trades for: ' + (user ? user.name : 'Current user');
+                await updateDashboardStats(scoped, 'strategy_');
+                status.textContent = scoped.length + ' trades shown. Home totals remain across all strategies.';
+                const body = document.getElementById('strategyTradeRows'); body.replaceChildren();
+                scoped.forEach(e => {
+                    const row = document.createElement('tr');
+                    [e.date || '—',e.symbol || '—',(Number(e.pnl)||0).toFixed(2)].forEach(t => {const td=document.createElement('td');td.textContent=t;row.append(td);});
+                    const cell = document.createElement('td'); const select = document.createElement('select');
+                    select.setAttribute('aria-label','Strategy for '+(e.symbol || 'trade')); fillStrategySelect(select,'assign',e.strategyId); cell.append(select); row.append(cell);
+                    const action = document.createElement('td'); const button = document.createElement('button'); button.type='button';button.className='add-buy-btn';button.textContent='Save Strategy';
+                    button.onclick = async () => {
+                        button.disabled=true;
+                        try {
+                            const {data:changed,error:err} = await db.from('journal_entries').update({strategy_id:select.value || null}).eq('id',e.key).eq('user_id',target).select('id');
+                            if (err || !changed || changed.length !== 1) {showToast(err ? err.message : 'Strategy could not be saved. Check permissions.', 'error');return;}
+                            showToast('Strategy saved. Other trade fields were not changed.', 'success'); await renderStrategies();
+                        } finally {button.disabled=false;}
+                    };
+                    action.append(button);row.append(action);body.append(row);
+                });
+                if (!scoped.length) {const row=document.createElement('tr');const cell=document.createElement('td');cell.colSpan=5;cell.textContent='No trades for this strategy.';row.append(cell);body.append(row);}
+            }
+            window.addStrategy = addStrategy;
+            window.renderStrategies = renderStrategies;
+
             // =============================================================
             //  DATA LAYER (Supabase-backed)
             // =============================================================
@@ -3090,6 +3271,7 @@
             function mapDbEntryToApp(row) {
                 return {
                     key: row.id,
+                    strategyId: row.strategy_id || null,
                     userId: row.user_id,
                     symbol: row.symbol,
                     direction: row.direction,
@@ -3154,7 +3336,7 @@
             }
 
             async function insertEntryRemote(entry, userId) {
-                const { data, error } = await db.from('journal_entries').insert(mapAppEntryToDb(entry, userId)).select().single();
+                const { data, error } = await db.from('journal_entries').insert({ ...mapAppEntryToDb(entry, userId), strategy_id: entry.strategyId }).select().single();
                 if (error) {
                     const message = error.message || 'Database error';
                     console.error('insertEntry error:', message, error);
@@ -3430,6 +3612,7 @@
                 document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
                 const map = {
                     dashboard: pageDashboard,
+                    strategies: document.getElementById("pageStrategies"),
                     calendar: pageCalendar,
                     journal: pageJournal,
                     addjournal: pageAddjournal,
@@ -3443,6 +3626,7 @@
 
                 const names = {
                     dashboard: 'Dashboard',
+                    strategies: 'Strategies',
                     calendar: 'Calendar',
                     journal: 'Journal',
                     addjournal: 'Add Journal',
@@ -3462,7 +3646,9 @@
                 if (page === 'profile') {
                     updateProfile();
                 }
+                if (page === 'strategies') await renderStrategies();
                 if (page === 'addjournal') {
+                    await loadStrategies();
                     handleMarketChange();
                 }
             }
@@ -3818,6 +4004,7 @@
 
                 updateStats(userEntries);
                 await updateDashboardStats(userEntries);
+                if (document.getElementById("pageStrategies").classList.contains("active")) await renderStrategies();
                 await renderJournalList();
                 await renderFullCalendar();
                 updateProfile();
@@ -3835,7 +4022,26 @@
                 statPnL.textContent = (totalPnL >= 0 ? '+$' : '-$') + Math.abs(totalPnL).toFixed(2);
             }
 
-            async function updateDashboardStats(entries) {
+            async function updateDashboardStats(entries, prefix = "") {
+                const dashTotal = document.getElementById(prefix + 'dashTotal');
+                const dashWinRate = document.getElementById(prefix + 'dashWinRate');
+                const dashWinsLosses = document.getElementById(prefix + 'dashWinsLosses');
+                const dashPnL = document.getElementById(prefix + 'dashPnL');
+                const dashWins = document.getElementById(prefix + 'dashWins');
+                const dashLosses = document.getElementById(prefix + 'dashLosses');
+                const avgWin = document.getElementById(prefix + 'avgWin');
+                const avgLoss = document.getElementById(prefix + 'avgLoss');
+                const profitFactor = document.getElementById(prefix + 'profitFactor');
+                const bestWorst = document.getElementById(prefix + 'bestWorst');
+                const todayTrades = document.getElementById(prefix + 'todayTrades');
+                const todayPnL = document.getElementById(prefix + 'todayPnL');
+                const todayBest = document.getElementById(prefix + 'todayBest');
+                const expectancyTotalEl = document.getElementById(prefix + 'expectancyTotal');
+                const expectancyLastMonthEl = document.getElementById(prefix + 'expectancyLastMonth');
+                const bestSymbol = document.getElementById(prefix + 'bestSymbol');
+                const bestPnL = document.getElementById(prefix + 'bestPnL');
+                const bestDate = document.getElementById(prefix + 'bestDate');
+                const bestDirection = document.getElementById(prefix + 'bestDirection');
                 if (!entries) {
                     const targetId = (currentUser.isAdmin && viewingUserId) ? viewingUserId : currentUser.id;
                     entries = await getEntriesForUser(targetId);
@@ -5105,6 +5311,10 @@
                     return;
                 }
 
+                const strategyId = document.getElementById('strategySelect').value;
+                if (!strategyId || !strategyCatalog.some(x => x.id === strategyId)) {
+                    showToast('Please select a strategy.', 'error'); return;
+                }
                 const userId = currentUser.id;
 
                 const dateTimeValue = document.getElementById('entryDateTime').value;
@@ -5137,6 +5347,7 @@
                 const nowStamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
 
                 const entry = {
+                    strategyId: strategyId,
                     symbol: document.getElementById('underlying').value || 'Unknown',
                     direction: directionValue,
                     market: marketValue,
