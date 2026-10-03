@@ -2608,6 +2608,13 @@
  <h3><i class="fas fa-chess"></i> Strategy Performance</h3>
  <p id="strategyScope"></p>
  <div class="form-row"><div class="form-group"><label for="strategyFilter">Strategy</label><select id="strategyFilter" onchange="window.renderStrategies()"><option value="all">All Strategies</option></select></div></div>
+ <button type="button" class="add-buy-btn" id="editStrategyButton" disabled onclick="window.openStrategyEditor()"><i class="fas fa-pen"></i> Edit Strategy</button>
+ <div id="editStrategyFields" hidden style="margin-top:14px">
+ <div class="form-group"><label for="editStrategyName">Strategy Name</label><input id="editStrategyName" maxlength="100"/></div>
+ <div class="form-group"><label for="editStrategyDescription">Description (optional)</label><textarea id="editStrategyDescription" maxlength="2000"></textarea></div>
+ <button type="button" class="add-buy-btn" id="saveStrategyEditButton" onclick="window.saveStrategyEdit()">Save Changes</button>
+ <button type="button" class="add-buy-btn" onclick="window.closeStrategyEditor()">Cancel</button>
+ <p id="editStrategyStatus" role="status"></p></div>
  <p id="strategyStatus" role="status"></p>
  <p>Win Rate includes breakeven trades in the denominator, as in Home. PnL uses your saved trade values.</p>
  </div><div class="dashboard-grid">
@@ -3133,7 +3140,7 @@
                 if (selected && [...el.options].some(x => x.value === selected)) el.value = selected;
             }
             async function loadStrategies() {
-                const { data, error } = await db.from('strategies').select('id,name,description').order('name');
+                const { data, error } = await db.from('strategies').select('id,name,description,created_by').order('name');
                 const status = document.getElementById('strategyFormStatus');
                 if (error) { status.textContent = 'Strategies could not load. Check that the SQL setup was completed. ' + error.message; return false; }
                 strategyCatalog = data || []; status.textContent = '';
@@ -3167,6 +3174,7 @@
                 if (error) { status.textContent = 'Could not load trades: ' + error.message; return; }
                 const entries = (data || []).map(mapDbEntryToApp).sort((a,b) => new Date(b.date)-new Date(a.date));
                 const selected = document.getElementById('strategyFilter').value;
+                refreshStrategyEditor();
                 const scoped = entries.filter(e => selected === 'all' || (selected === 'unassigned' ? !e.strategyId : e.strategyId === selected));
                 const user = allUsers.find(x => x.id === target);
                 document.getElementById('strategyScope').textContent = 'Trades for: ' + (user ? user.name : 'Current user');
@@ -3191,6 +3199,72 @@
                 });
                 if (!scoped.length) {const row=document.createElement('tr');const cell=document.createElement('td');cell.colSpan=5;cell.textContent='No trades for this strategy.';row.append(cell);body.append(row);}
             }
+            let editingStrategyId = null;
+            let strategyEditSaving = false;
+            function mayEditStrategy(strategy) {
+                return !!(strategy && currentUser && (currentUser.isAdmin || strategy.created_by === currentUser.id));
+            }
+            function closeStrategyEditor() {
+                if (strategyEditSaving) return;
+                editingStrategyId = null;
+                document.getElementById('editStrategyFields').hidden = true;
+                document.getElementById('editStrategyStatus').textContent = '';
+            }
+            function refreshStrategyEditor() {
+                const selected = document.getElementById('strategyFilter').value;
+                const strategy = strategyCatalog.find(x => x.id === selected);
+                document.getElementById('editStrategyButton').disabled = strategyEditSaving || !mayEditStrategy(strategy);
+                if (editingStrategyId && (editingStrategyId !== selected || !mayEditStrategy(strategy))) closeStrategyEditor();
+            }
+            function openStrategyEditor() {
+                const selected = document.getElementById('strategyFilter').value;
+                const strategy = strategyCatalog.find(x => x.id === selected);
+                if (!mayEditStrategy(strategy)) return;
+                editingStrategyId = strategy.id;
+                document.getElementById('editStrategyName').value = strategy.name;
+                document.getElementById('editStrategyDescription').value = strategy.description || '';
+                document.getElementById('editStrategyStatus').textContent = '';
+                document.getElementById('editStrategyFields').hidden = false;
+                document.getElementById('editStrategyName').focus();
+            }
+            async function saveStrategyEdit() {
+                if (strategyEditSaving) return;
+                const id = editingStrategyId;
+                const strategy = strategyCatalog.find(x => x.id === id);
+                if (!mayEditStrategy(strategy)) return;
+                const name = document.getElementById('editStrategyName').value.trim();
+                const description = document.getElementById('editStrategyDescription').value.trim();
+                const status = document.getElementById('editStrategyStatus');
+                if (!name || name.length > 100 || description.length > 2000) {
+                    status.textContent = 'Enter a name (1–100 characters) and a description up to 2000 characters.'; return;
+                }
+                strategyEditSaving = true;
+                const button = document.getElementById('saveStrategyEditButton'); button.disabled = true;
+                const filter = document.getElementById('strategyFilter'); filter.disabled = true;
+                document.getElementById('editStrategyButton').disabled = true;
+                let saved = false;
+                try {
+                    status.textContent = 'Saving…';
+                    const { data, error } = await db.rpc('rename_journal_strategy', {
+                        p_strategy_id: id, p_name: name, p_description: description
+                    });
+                    if (error || !data || data.length !== 1) {
+                        status.textContent = error && error.code === '23505' ? 'That strategy name already exists.' : 'Could not save: ' + (error ? error.message : 'No strategy was updated.');
+                        return;
+                    }
+                    saved = true;
+                    showToast('Strategy updated. Linked trades are preserved.', 'success');
+                } catch (error) {
+                    status.textContent = 'Could not save: ' + error.message;
+                } finally {
+                    strategyEditSaving = false; button.disabled = false; filter.disabled = false;
+                    refreshStrategyEditor();
+                }
+                if (saved) { closeStrategyEditor(); await renderStrategies(); }
+            }
+            window.openStrategyEditor = openStrategyEditor;
+            window.closeStrategyEditor = closeStrategyEditor;
+            window.saveStrategyEdit = saveStrategyEdit;
             window.addStrategy = addStrategy;
             window.renderStrategies = renderStrategies;
 
